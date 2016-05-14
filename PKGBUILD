@@ -1,0 +1,319 @@
+buildarch=2
+
+pkgbase=linux-mvebu_v5
+_kernelname=${pkgbase#linux}
+_desc="Marvell Engineering Business Unit ARMv5"
+pkgver=4.5.4
+srcver=${pkgver%.0}
+pkgrel=1
+cryptodev_commit=bc67142c57eadc0aafd0323ec527849012786643
+bfqver=v7r11 
+
+### BFQ patch kernel version
+bfqkern=${pkgver:0:3}
+# bfqkern=4.4
+
+### AUFS branch name
+aufsbranch="aufs${pkgver:0:3}"
+# aufsbranch="aufs4.x-rcN"
+
+arch=('arm')
+url="http://www.kernel.org/"
+license=('GPL2')
+makedepends=('xmlto' 'docbook-xsl' 'uboot-tools' 'kmod' 'inetutils' 'bc' 'git')
+options=('!strip')
+
+source=("https://kernel.org/pub/linux/kernel/v4.x/linux-${srcver}.tar.xz"
+        'config'
+	'0001-disable-mv643xx_eth-TSO.patch'
+        "git+https://github.com/sfjro/aufs4-standalone.git#branch=${aufsbranch}"
+        "cryptodev-${cryptodev_commit}.tar.gz::https://github.com/cryptodev-linux/cryptodev-linux/archive/${cryptodev_commit}.tar.gz"
+        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0001-block-cgroups-kconfig-build-bits-for-BFQ-${bfqver}-${bfqkern}.0.patch"
+        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0002-block-introduce-the-BFQ-${bfqver}-I-O-sched-for-${bfqkern}.0.patch"
+        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0003-block-bfq-add-Early-Queue-Merge-EQM-to-BFQ-${bfqver}-for.patch"
+        'linux.preset')
+
+md5sums=('5da409b61ef6b74a64a8a5075eb428ed'
+         '0ccab67170e5e905fbf762db63179f8f'
+         '09d44b9f07abfaeaf4f688ee52034786'
+         'SKIP'
+         '2c8ecae91223868decdf37b8a76489b7'
+         'b3b845477eb2e62e745803685bde9057'
+         '7e50b0145ed002319a8fb651b72f7cd0'
+         'a873c975acf24c3ef0225b9fcd3f3e1e'
+         '083ad318f49af3bd161a98212e94a36b')
+prepare() {
+  cd "${srcdir}/linux-${srcver}"
+
+  msg2 "Copying aufs patches into the kernel source tree"
+  cp -ru "${srcdir}/aufs4-standalone/"{Documentation,fs} "${srcdir}/linux-${srcver}/"
+  cp -ru "${srcdir}/aufs4-standalone/include/uapi/linux/aufs_type.h" "${srcdir}/linux-${srcver}/include/"{linux/,uapi/linux/}
+
+  msg2 "Applying aufs patches"
+  patch -Np1 -i ../aufs4-standalone/aufs4-kbuild.patch
+  patch -Np1 -i ../aufs4-standalone/aufs4-base.patch
+  patch -Np1 -i ../aufs4-standalone/aufs4-mmap.patch
+  patch -Np1 -i ../aufs4-standalone/aufs4-standalone.patch
+
+  msg2 "Disable buggy TCP segmentation offload implementation"
+  msg2 "http://archlinuxarm.org/forum/viewtopic.php?f=9&t=7692"
+  patch -Np1 -i ${srcdir}/0001-disable-mv643xx_eth-TSO.patch
+
+  msg2 "Add BFQ patches"
+  patch -Np1 -i "${srcdir}/0001-block-cgroups-kconfig-build-bits-for-BFQ-${bfqver}-${bfqkern}.0.patch"
+  patch -Np1 -i "${srcdir}/0002-block-introduce-the-BFQ-${bfqver}-I-O-sched-for-${bfqkern}.0.patch"
+  patch -Np1 -i "${srcdir}/0003-block-bfq-add-Early-Queue-Merge-EQM-to-BFQ-${bfqver}-for.patch"
+
+  cat "${srcdir}/config" > ./.config
+
+  # add pkgrel to extraversion
+  sed -ri "s|^(EXTRAVERSION =)(.*)|\1 \2-${pkgrel}|" Makefile
+
+  # don't run depmod on 'make install'. We'll do this ourselves in packaging
+  sed -i '2iexit 0' scripts/depmod.sh
+}
+
+build() {
+  cd "${srcdir}/linux-${srcver}"
+
+  # get kernel version
+  make prepare
+
+  # load configuration
+  # Configure the kernel. Replace the line below with one of your choice.
+  #make menuconfig # CLI menu for configuration
+  #make nconfig # new CLI menu for configuration
+  #make xconfig # X-based configuration
+  #make oldconfig # using old config from previous kernel version
+  # ... or manually edit .config
+
+  # Copy back our configuration (use with new kernel version)
+  #cp ./.config ../${pkgbase}.config
+
+  ####################
+  # stop here
+  # this is useful to configure the kernel
+  #msg "Stopping build"
+  #return 1
+  ####################
+
+  #yes "" | make config
+
+  msg "Building!"
+  make ${MAKEFLAGS} zImage modules dtbs
+
+  msg "Building cryptodev module"
+  cd "${srcdir}/cryptodev-linux-${cryptodev_commit}"
+  make KERNEL_DIR="${srcdir}/linux-${srcver}"
+}
+
+_package() {
+  pkgdesc="The Linux Kernel and modules - ${_desc}"
+  depends=('coreutils' 'linux-firmware' 'kmod' 'mkinitcpio>=0.7')
+  optdepends=('crda: to set the correct wireless channels of your country')
+  provides=('kernel26' 'linux=${pkgver}' 'aufs_friendly' 'cryptodev_friendly')
+  conflicts=('linux-kirkwood' 'linux-kirkwood-dt' 'linux' 'linux-olinuxino')
+  backup=("etc/mkinitcpio.d/${pkgbase}.preset")
+  install=${pkgname}.install
+
+  cd "${srcdir}/linux-${srcver}"
+
+  KARCH=arm
+
+  # get kernel version
+  _kernver="$(make kernelrelease)"
+  #_basekernel=${_kernver%%-*}
+  #_basekernel=${_basekernel%.*}
+  _basekernel=${pkgver}
+
+  mkdir -p "${pkgdir}"/{lib/modules,lib/firmware,boot/dtbs}
+  make INSTALL_MOD_PATH="${pkgdir}" modules_install
+  cp arch/$KARCH/boot/zImage "${pkgdir}/boot/zImage"
+  cp arch/$KARCH/boot/dts/*.dtb "${pkgdir}/boot/dtbs"
+
+  # set correct depmod command for install
+  sed \
+    -e  "s/KERNEL_NAME=.*/KERNEL_NAME=${_kernelname}/g" \
+    -e  "s/KERNEL_VERSION=.*/KERNEL_VERSION=${_kernver}/g" \
+    -i "${startdir}/${pkgname}.install"
+
+  # install mkinitcpio preset file for kernel
+  install -D -m644 "${srcdir}/linux.preset" "${pkgdir}/etc/mkinitcpio.d/${pkgbase}.preset"
+  sed \
+    -e "1s|'linux.*'|'${pkgbase}'|" \
+    -e "s|ALL_kver=.*|ALL_kver=\"${_kernver}\"|" \
+    -i "${pkgdir}/etc/mkinitcpio.d/${pkgbase}.preset"
+
+  # remove build and source links
+  rm -f "${pkgdir}"/lib/modules/${_kernver}/{source,build}
+  # remove the firmware
+  rm -rf "${pkgdir}/lib/firmware"
+  # gzip -9 all modules to save 100MB of space
+  find "${pkgdir}" -name '*.ko' |xargs -P 2 -n 1 gzip -9
+  # make room for external modules
+  ln -s "../extramodules-${_basekernel}-${_kernelname:-ARCH}" "${pkgdir}/lib/modules/${_kernver}/extramodules"
+  # add real version for building modules and running depmod from post_install/upgrade
+  mkdir -p "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ARCH}"
+  echo "${_kernver}" > "${pkgdir}/lib/modules/extramodules-${_basekernel}-${_kernelname:-ARCH}/version"
+
+  # install cryptodev module
+  cd "${srcdir}/cryptodev-linux-${cryptodev_commit}"
+  make -C "${srcdir}/linux-${srcver}" INSTALL_MOD_PATH="${pkgdir}" SUBDIRS=`pwd` modules_install
+
+  cd "${srcdir}/linux-${srcver}"
+
+  # Now we call depmod...
+  depmod -b "$pkgdir" -F System.map "$_kernver"
+
+  # move module tree /lib -> /usr/lib
+  mkdir -p "${pkgdir}/usr"
+  mv "$pkgdir/lib" "$pkgdir/usr"
+}
+
+_package-headers() {
+  pkgdesc="Header files and scripts for building modules for linux kernel - ${_desc}"
+  provides=('linux-headers=${pkgver}')
+  conflicts=('linux-kirkwood-headers' 'linux-headers-kirkwood-dt' 'linux-headers' 'linux-headers-olinuxino')
+  replaces=('linux-headers-mvebu_v5')
+
+  install -dm755 "${pkgdir}/usr/lib/modules/${_kernver}"
+
+  cd "${pkgdir}/usr/lib/modules/${_kernver}"
+  ln -sf ../../../src/linux-${_kernver} build
+
+  cd "${srcdir}/linux-${srcver}"
+  install -D -m644 Makefile \
+    "${pkgdir}/usr/src/linux-${_kernver}/Makefile"
+  install -D -m644 kernel/Makefile \
+    "${pkgdir}/usr/src/linux-${_kernver}/kernel/Makefile"
+  install -D -m644 .config \
+    "${pkgdir}/usr/src/linux-${_kernver}/.config"
+
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/include"
+
+  for i in acpi asm-generic config crypto drm generated linux math-emu \
+    media net pcmcia scsi sound trace uapi video xen; do
+    cp -a include/${i} "${pkgdir}/usr/src/linux-${_kernver}/include/"
+  done
+
+  # copy arch includes for external modules
+  mkdir -p ${pkgdir}/usr/src/linux-${_kernver}/arch/$KARCH
+  cp -a arch/$KARCH/include ${pkgdir}/usr/src/linux-${_kernver}/arch/$KARCH/
+  mkdir -p ${pkgdir}/usr/src/linux-${_kernver}/arch/$KARCH/plat-orion
+  cp -a arch/$KARCH/plat-orion/include ${pkgdir}/usr/src/linux-${_kernver}/arch/$KARCH/plat-orion/
+
+  # copy files necessary for later builds, like nvidia and vmware
+  cp Module.symvers "${pkgdir}/usr/src/linux-${_kernver}"
+  cp -a scripts "${pkgdir}/usr/src/linux-${_kernver}"
+
+  # fix permissions on scripts dir
+  chmod og-w -R "${pkgdir}/usr/src/linux-${_kernver}/scripts"
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/.tmp_versions"
+
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/arch/${KARCH}/kernel"
+
+  cp arch/${KARCH}/Makefile "${pkgdir}/usr/src/linux-${_kernver}/arch/${KARCH}/"
+
+  cp arch/${KARCH}/kernel/asm-offsets.s "${pkgdir}/usr/src/linux-${_kernver}/arch/${KARCH}/kernel/"
+
+  # add headers for lirc package
+  # pci
+  for i in bt8xx cx88 saa7134; do
+    mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/pci/${i}"
+    cp -a drivers/media/pci/${i}/*.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/pci/${i}"
+  done
+  # usb
+  for i in cpia2 em28xx pwc; do
+    mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/usb/${i}"
+    cp -a drivers/media/usb/${i}/*.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/usb/${i}"
+  done
+  # i2c
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/i2c"
+  cp drivers/media/i2c/*.h  "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/i2c/"
+  for i in cx25840; do
+    mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/i2c/${i}"
+    cp -a drivers/media/i2c/${i}/*.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/i2c/${i}"
+  done
+
+  # add docbook makefile
+  install -D -m644 Documentation/DocBook/Makefile \
+    "${pkgdir}/usr/src/linux-${_kernver}/Documentation/DocBook/Makefile"
+
+  # add dm headers
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/md"
+  cp drivers/md/*.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/md"
+
+  # add inotify.h
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/include/linux"
+  cp include/linux/inotify.h "${pkgdir}/usr/src/linux-${_kernver}/include/linux/"
+
+  # add wireless headers
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/net/mac80211/"
+  cp net/mac80211/*.h "${pkgdir}/usr/src/linux-${_kernver}/net/mac80211/"
+
+  # add dvb headers for external modules
+  # in reference to:
+  # http://bugs.archlinux.org/task/9912
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/dvb-core"
+  cp drivers/media/dvb-core/*.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/dvb-core/"
+  # and...
+  # http://bugs.archlinux.org/task/11194
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/include/config/dvb/"
+  cp include/config/dvb/*.h "${pkgdir}/usr/src/linux-${_kernver}/include/config/dvb/"
+
+  # add dvb headers for http://mcentral.de/hg/~mrec/em28xx-new
+  # in reference to:
+  # http://bugs.archlinux.org/task/13146
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/dvb-frontends/"
+  cp drivers/media/dvb-frontends/lgdt330x.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/dvb-frontends/"
+  cp drivers/media/i2c/msp3400-driver.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/i2c/"
+
+  # add dvb headers
+  # in reference to:
+  # http://bugs.archlinux.org/task/20402
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/usb/dvb-usb"
+  cp drivers/media/usb/dvb-usb/*.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/usb/dvb-usb/"
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/dvb-frontends"
+  cp drivers/media/dvb-frontends/*.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/dvb-frontends/"
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/tuners"
+  cp drivers/media/tuners/*.h "${pkgdir}/usr/src/linux-${_kernver}/drivers/media/tuners/"
+
+  # add xfs and shmem for aufs building
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/fs/xfs"
+  mkdir -p "${pkgdir}/usr/src/linux-${_kernver}/mm"
+
+  # copy in Kconfig files
+  for i in `find . -name "Kconfig*"`; do
+    mkdir -p "${pkgdir}"/usr/src/linux-${_kernver}/`echo ${i} | sed 's|/Kconfig.*||'`
+    cp ${i} "${pkgdir}/usr/src/linux-${_kernver}/${i}"
+  done
+
+  chown -R root.root "${pkgdir}/usr/src/linux-${_kernver}"
+  find "${pkgdir}/usr/src/linux-${_kernver}" -type d -exec chmod 755 {} \;
+
+  # strip scripts directory
+  find "${pkgdir}/usr/src/linux-${_kernver}/scripts" -type f -perm -u+w 2>/dev/null | while read binary ; do
+    case "$(file -bi "${binary}")" in
+      *application/x-sharedlib*) # Libraries (.so)
+        /usr/bin/strip ${STRIP_SHARED} "${binary}";;
+      *application/x-archive*) # Libraries (.a)
+        /usr/bin/strip ${STRIP_STATIC} "${binary}";;
+      *application/x-executable*) # Binaries
+        /usr/bin/strip ${STRIP_BINARIES} "${binary}";;
+    esac
+  done
+
+  # remove unneeded architectures
+  rm -rf "${pkgdir}"/usr/src/linux-${_kernver}/arch/{alpha,arm26,avr32,blackfin,cris,frv,h8300,ia64,m32r,m68k,m68knommu,mips,microblaze,mn10300,parisc,powerpc,ppc,s390,sh,sh64,sparc,sparc64,um,v850,x86,xtensa}
+
+  # install cryptodev header
+  cd "${srcdir}/cryptodev-linux-${cryptodev_commit}"
+  install -D crypto/cryptodev.h "${pkgdir}/usr/src/linux-${_kernver}/crypto/cryptodev.h"
+}
+
+pkgname=("${pkgbase}" "${pkgbase}-headers")
+for _p in ${pkgname[@]}; do
+  eval "package_${_p}() {
+    _package${_p#${pkgbase}}
+  }"
+done

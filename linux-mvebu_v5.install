@@ -1,0 +1,48 @@
+# arg 1:  the new package version
+# arg 2:  the old package version
+
+KERNEL_NAME=-mvebu_v5
+KERNEL_VERSION=4.5.4-1-ARCH
+
+post_install () {
+  # updating module dependencies
+  echo ">>> Updating module dependencies. Please wait ..."
+  depmod ${KERNEL_VERSION}
+
+  echo ">>> Generating initial ramdisk, using mkinitcpio. Please wait..."
+  mkinitcpio -p linux${KERNEL_NAME}
+
+  echo "**********************************************************************"
+  echo "WARNING! This kernel package will NOT boot without user intervention."
+  echo ""
+  echo "         A mvebu_v5 Flattened Device Tree supporting zImage is"
+  echo "         placed in /boot and all mainline supported .dtb and .dts"
+  echo "         files are in /boot/dtb for you to prep as appropriate."
+  echo ""
+  echo "         Depending on your particular device, you may need to upgrade"
+  echo "         your installed U-Boot version, and/or modify your boot env."
+  echo "         Some platforms may need to append the appropriate .dtb to the"
+  echo "         end of the zImage and make a uImage from the resulting blob."
+  echo "**********************************************************************"
+}
+
+post_upgrade() {
+  if grep "^[^#]*[[:space:]]/boot" etc/fstab 2>&1 >/dev/null; then
+    if ! grep "[[:space:]]/boot" etc/mtab 2>&1 >/dev/null; then
+      echo "WARNING: /boot appears to be a seperate partition but is not mounted."
+      echo "         You probably just broke your system. Congratulations."
+    fi
+  fi
+
+  # updating module dependencies
+  echo ">>> Updating module dependencies. Please wait ..."
+  depmod ${KERNEL_VERSION}
+
+  echo ">>> Generating initial ramdisk, using mkinitcpio. Please wait..."
+  mkinitcpio -p linux${KERNEL_NAME}
+}
+
+post_remove() {
+  # also remove the compat symlinks
+  rm -f boot/initramfs-linux.img
+}
