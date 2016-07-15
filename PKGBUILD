@@ -3,15 +3,15 @@ buildarch=2
 pkgbase=linux-mvebu_v5
 _kernelname=${pkgbase#linux}
 _desc="Marvell Engineering Business Unit ARMv5"
-pkgver=4.5.4
+pkgver=4.6.4
 srcver=${pkgver%.0}
 pkgrel=1
-cryptodev_commit=bc67142c57eadc0aafd0323ec527849012786643
-bfqver=v7r11 
+cryptodev_commit=7a3a9ee1329f7224b4fc564b80ef8160457caf76
+bfqver=v7r11
 
 ### BFQ patch kernel version
-bfqkern=${pkgver:0:3}
-# bfqkern=4.4
+# bfqkern=${pkgver:0:3}
+bfqkern=4.5
 
 ### AUFS branch name
 aufsbranch="aufs${pkgver:0:3}"
@@ -31,18 +31,24 @@ source=("https://kernel.org/pub/linux/kernel/v4.x/linux-${srcver}.tar.xz"
         "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0001-block-cgroups-kconfig-build-bits-for-BFQ-${bfqver}-${bfqkern}.0.patch"
         "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0002-block-introduce-the-BFQ-${bfqver}-I-O-sched-for-${bfqkern}.0.patch"
         "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0003-block-bfq-add-Early-Queue-Merge-EQM-to-BFQ-${bfqver}-for.patch"
-        'linux.preset')
+        'linux.preset'
+        'cryptodev_linux_4.6_fix.patch')
 
-md5sums=('5da409b61ef6b74a64a8a5075eb428ed'
-         '0ccab67170e5e905fbf762db63179f8f'
+md5sums=('b9f8183fa26621f9951ae522556c12d3'
+         'c0893dc64072a3aadc27b5eaa8226b80'
          '09d44b9f07abfaeaf4f688ee52034786'
          'SKIP'
-         '2c8ecae91223868decdf37b8a76489b7'
+         'ad56ca4e2a29a3b76f3526c262d9fec1'
          'b3b845477eb2e62e745803685bde9057'
          '7e50b0145ed002319a8fb651b72f7cd0'
          'a873c975acf24c3ef0225b9fcd3f3e1e'
-         '083ad318f49af3bd161a98212e94a36b')
+         'e44cf4072e719dcb1f37ea58c456ee34'
+         'c7cf472186a62d3b972d65a36ea6be72')
 prepare() {
+  msg2 "Patching cryptodev"
+  cd "${srcdir}/cryptodev-linux-${cryptodev_commit}"
+  patch -Np1 -i "${srcdir}/cryptodev_linux_4.6_fix.patch"
+
   cd "${srcdir}/linux-${srcver}"
 
   msg2 "Copying aufs patches into the kernel source tree"
