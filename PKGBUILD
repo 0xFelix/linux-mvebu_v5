@@ -3,19 +3,19 @@ buildarch=2
 pkgbase=linux-mvebu_v5
 _kernelname=${pkgbase#linux}
 _desc="Marvell Engineering Business Unit ARMv5"
-pkgver=4.6.4
+pkgver=4.7.0
 srcver=${pkgver%.0}
 pkgrel=1
 cryptodev_commit=7a3a9ee1329f7224b4fc564b80ef8160457caf76
-bfqver=v7r11
+bfqver=v8
 
 ### BFQ patch kernel version
-# bfqkern=${pkgver:0:3}
-bfqkern=4.5
+bfqkern=${pkgver:0:3}
+# bfqkern=4.5
 
 ### AUFS branch name
-aufsbranch="aufs${pkgver:0:3}"
-# aufsbranch="aufs4.x-rcN"
+# aufsbranch="aufs${pkgver:0:3}"
+aufsbranch="aufs4.x-rcN"
 
 arch=('arm')
 url="http://www.kernel.org/"
@@ -28,20 +28,22 @@ source=("https://kernel.org/pub/linux/kernel/v4.x/linux-${srcver}.tar.xz"
 	'0001-disable-mv643xx_eth-TSO.patch'
         "git+https://github.com/sfjro/aufs4-standalone.git#branch=${aufsbranch}"
         "cryptodev-${cryptodev_commit}.tar.gz::https://github.com/cryptodev-linux/cryptodev-linux/archive/${cryptodev_commit}.tar.gz"
-        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0001-block-cgroups-kconfig-build-bits-for-BFQ-${bfqver}-${bfqkern}.0.patch"
-        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0002-block-introduce-the-BFQ-${bfqver}-I-O-sched-for-${bfqkern}.0.patch"
-        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0003-block-bfq-add-Early-Queue-Merge-EQM-to-BFQ-${bfqver}-for.patch"
+        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0001-block-cgroups-kconfig-build-bits-for-BFQ-v7r11-${bfqkern}.0.patch"
+        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0002-block-introduce-the-BFQ-v7r11-I-O-sched-for-${bfqkern}.0.patch"
+        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0003-block-bfq-add-Early-Queue-Merge-EQM-to-BFQ-v7r11-for.patch"
+        "ftp://teambelgium.net/bfq/patches/${bfqkern}.0-${bfqver}/0004-block-bfq-turn-BFQ-v7r11-for-4.7.0-into-BFQ-${bfqver}-for-4.patch"
         'linux.preset'
         'cryptodev_linux_4.6_fix.patch')
 
-md5sums=('b9f8183fa26621f9951ae522556c12d3'
-         'c0893dc64072a3aadc27b5eaa8226b80'
+md5sums=('5276563eb1f39a048e4a8a887408c031'
+         '39ad477c7dd01353954f713080640d98'
          '09d44b9f07abfaeaf4f688ee52034786'
          'SKIP'
-         'ad56ca4e2a29a3b76f3526c262d9fec1'
-         'b3b845477eb2e62e745803685bde9057'
-         '7e50b0145ed002319a8fb651b72f7cd0'
-         'a873c975acf24c3ef0225b9fcd3f3e1e'
+         'ad56ca4e2a29a3b76f3526c262d9fec1'         
+         '6392007929a2ef29bae26330f7314434'
+         'ad7ee345876ae6814518b2144fb8a9de'
+         '0b8d1684815b103b8b9e7dc6ec4ea8a0'
+         '93a6170e2d4ab73cf1af080077d6c8bb'
          'e44cf4072e719dcb1f37ea58c456ee34'
          'c7cf472186a62d3b972d65a36ea6be72')
 prepare() {
@@ -66,9 +68,10 @@ prepare() {
   patch -Np1 -i ${srcdir}/0001-disable-mv643xx_eth-TSO.patch
 
   msg2 "Add BFQ patches"
-  patch -Np1 -i "${srcdir}/0001-block-cgroups-kconfig-build-bits-for-BFQ-${bfqver}-${bfqkern}.0.patch"
-  patch -Np1 -i "${srcdir}/0002-block-introduce-the-BFQ-${bfqver}-I-O-sched-for-${bfqkern}.0.patch"
-  patch -Np1 -i "${srcdir}/0003-block-bfq-add-Early-Queue-Merge-EQM-to-BFQ-${bfqver}-for.patch"
+  patch -Np1 -i "${srcdir}/0001-block-cgroups-kconfig-build-bits-for-BFQ-v7r11-${bfqkern}.0.patch"
+  patch -Np1 -i "${srcdir}/0002-block-introduce-the-BFQ-v7r11-I-O-sched-for-${bfqkern}.0.patch"
+  patch -Np1 -i "${srcdir}/0003-block-bfq-add-Early-Queue-Merge-EQM-to-BFQ-v7r11-for.patch"
+  patch -Np1 -i "${srcdir}/0004-block-bfq-turn-BFQ-v7r11-for-4.7.0-into-BFQ-${bfqver}-for-4.patch"
 
   cat "${srcdir}/config" > ./.config
 
